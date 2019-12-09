@@ -1,4 +1,4 @@
-package com.flink.poc;
+package com.flink.poc.test;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 
