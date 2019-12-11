@@ -1,4 +1,4 @@
-package com.flink.poc;
+package com.flink.poc.test;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -10,6 +10,8 @@ import org.apache.flink.streaming.util.serialization.JSONKeyValueDeserialization
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.java.StreamTableEnvironment;
 
+import javax.xml.crypto.Data;
+import java.util.List;
 import java.util.Properties;
 
 
@@ -33,11 +35,10 @@ public class Test {
         return properties;
     }
 
-    private static void processListings() {
-        Properties properties = setProps();
+    private static DataStream<Listing> processListings(Properties properties) {
         FlinkKafkaConsumer<ObjectNode> kafkaConsumer = new FlinkKafkaConsumer<>("poc_test_listing", new JSONKeyValueDeserializationSchema(true), properties);
         kafkaConsumer.setStartFromEarliest();
-        DataStream<Listing> stream = env.addSource(kafkaConsumer).map((MapFunction<ObjectNode, Listing>) jsonNodes -> {
+        DataStream<Listing> listingStream = env.addSource(kafkaConsumer).map((MapFunction<ObjectNode, Listing>) jsonNodes -> {
             JsonNode jsonNode = jsonNodes.get("value");
             Listing listing = new Listing();
             listing.setListingId(jsonNode.get("Listing ID").textValue());
@@ -52,46 +53,62 @@ public class Test {
             listing.setCoListAgentId(jsonNode.get("CoList Agent ID").textValue());
             listing.setListOfficeBoardCode(jsonNode.get("List Office Board Code").textValue());
             listing.setList207(jsonNode.get("LIST_207").textValue());
-            System.out.println("### list obj " + listing);
             return listing;
-        });
+        }).keyBy("agentId");
+        return listingStream;
 
-        tEnv.registerDataStream("Orders", stream, "listingId, " +
-                "earnestPayableTo, " +
-                "statusChangeDate, " +
-                "inclusions, " +
-                "county, " +
-                "agentId, " +
-                "termsOffered, " +
-                "nbrOfAcres, " +
-                "coListingMemberUrl, " +
-                "coListAgentId, " +
-                "listOfficeBoardCode, " +
-                "list207");
-        Table result2 = tEnv.sqlQuery(
-                "SELECT * FROM Orders");
-        tEnv.toAppendStream(result2, Listing.class).print();
-        Table result3 = tEnv.sqlQuery("SELECT COUNT(*) FROM Orders");
-        tEnv.toRetractStream(result3, Long.class).print();
+    }
 
-//        Table listingsTable = tEnv.fromDataStream(stream, "listing_id, " +
-//                "earnest_$_payable_to, " +
-//                "status_change_date, " +
-//                "inclusions, county, " +
-//                "l_agent_id, terms_offered, " +
-//                "nbr_of_acres, " +
-//                "colisting_member_url, " +
-//                "l_colist_agent_id, " +
-//                "list_office_board_code, " +
-//                "list_207");
-//        Table result = tEnv.sqlQuery("SELECT COUNT(*) FROM listingsTable");
-//        tEnv.registerTable("t_result", result);
-//        tEnv.toAppendStream(result, Types.LONG).print();
+    private static DataStream<Agent> processAgents(Properties properties) {
+        FlinkKafkaConsumer<ObjectNode> agentKafkaConsumer = new FlinkKafkaConsumer<>("poc_test_agent", new JSONKeyValueDeserializationSchema(true), properties);
+        agentKafkaConsumer.setStartFromEarliest();
+        DataStream<Agent> agentStream = env.addSource(agentKafkaConsumer).map((MapFunction<ObjectNode, Agent>) jsonNodes -> {
+            JsonNode jsonNode = jsonNodes.get("value");
+            Agent agent = new Agent();
+            agent.setAgentId(jsonNode.get("Agent ID").textValue());
+            agent.setCity(jsonNode.get("City").textValue());
+            agent.setOfficeId(jsonNode.get("Office ID").textValue());
+            agent.setEmail(jsonNode.get("Email").textValue());
+            agent.setRenegotiationExp(jsonNode.get("RENegotiation Exp").textValue());
+            agent.setNrdsid(jsonNode.get("NRDSID").textValue());
+            agent.setMlsStatus(jsonNode.get("MLS Status").textValue());
+            agent.setAgentTimestamp(jsonNode.get("agent_timestamp").textValue());
+            // System.out.println("### agent obj " + agent);
+            return agent;
+        }).keyBy("agentId");
+        return agentStream;
     }
 
     public static void main(String[] args) throws Exception {
-        processListings();
+        Properties properties = setProps();
+        DataStream<Listing> listingStream = processListings(properties);
+//        tEnv.registerDataStream("Listings", listingStream, "listingId, " +
+//                "earnestPayableTo, " +
+//                "statusChangeDate, " +
+//                "inclusions, " +
+//                "county, " +
+//                "agentId, " +
+//                "termsOffered, " +
+//                "nbrOfAcres, " +
+//                "coListingMemberUrl, " +
+//                "coListAgentId, " +
+//                "listOfficeBoardCode, " +
+//                "list207");
+
+        DataStream<Agent> agentStream = processAgents(properties);
+//        tEnv.registerDataStream("Agents", agentStream, "agentId, " +
+//                "city, " +
+//                "officeId, " +
+//                "email, " +
+//                "renegotiationExp, " +
+//                "nrdsid, " +
+//                "mlsStatus, " +
+//                "agentTimestamp");
+
+        DataStream<List<JoinedListing>> enrichedListings = listingStream.connect(agentStream).flatMap(new EnrichmentFunction()).uid("enriched");
+        enrichedListings.print();
         env.execute("test-job");
+
     }
 
 
