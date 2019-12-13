@@ -1,6 +1,5 @@
 package com.flink.poc.test;
 
-import org.apache.commons.lang.StringUtils;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
@@ -14,8 +13,6 @@ import org.apache.flink.table.api.java.StreamTableEnvironment;
 import org.apache.flink.table.functions.TemporalTableFunction;
 import org.apache.flink.types.Row;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 
 public class TemporalTest {
@@ -72,11 +69,9 @@ public class TemporalTest {
                 "proctime.proctime");
         tEnv.registerTable("ListingsHistory", listingsHistory);
 
-//        DataStream<String> listingIdsStream = stream.map(new MapFunction<Listing, String>() {
-//            @Override
-//            public String map(Listing listing) throws Exception {
-//                return listing.getListingId();
-//            }
+//        DataStream<String> listingIdsStream = env.addSource(kafkaConsumer).map((MapFunction<ObjectNode, String>) jsonNodes -> {
+//            JsonNode jsonNode = jsonNodes.get("value");
+//            return jsonNode.get("Listing ID").textValue();
 //        });
 //        Iterator<String> listingIdIter = DataStreamUtils.collect(listingIdsStream);
 //        List<String> ids = new ArrayList<>();
@@ -121,17 +116,9 @@ public class TemporalTest {
         // Listings -> Rates
 
         //   String queryStr = "SELECT * FROM ListingsHistory as o, LATERAL TABLE (Agents(o.proctime)) as r WHERE r.agentId = o.agentId";
-        //String tmpId = "L1002";
-        List<String> list = new ArrayList<>();
-        list.add("L1002");
-        list.add("L1001");
-        System.out.println("### list as string " + StringUtils.join(list, ','));
-        String xyz = StringUtils.join(list, ',');
-        String abc = "L1002";
         String queryStr = "SELECT * FROM ListingsHistory as o " +
                 "INNER JOIN LATERAL TABLE (Agents(o.proctime)) as r ON (r.agentId = o.agentId) " +
-                "WHERE o.listingId = 'L1002'";
-        //    "INNER JOIN LATERAL TABLE (Agents(o.proctime)) as ra ON (ra.agentId = o.coListAgentId)";
+                "INNER JOIN LATERAL TABLE (Agents(o.proctime)) as ra ON (ra.agentId = o.coListAgentId)";
         Table result = tEnv.sqlQuery(queryStr);
         tEnv.registerTable("Result", result);
         tEnv.toAppendStream(result, Row.class).print();
