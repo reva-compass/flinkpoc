@@ -1,4 +1,4 @@
-package com.flink.poc;
+package com.flink.poc.test;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -73,6 +73,7 @@ public class Test {
         tEnv.toAppendStream(result2, Listing.class).print();
         Table result3 = tEnv.sqlQuery("SELECT COUNT(*) FROM Orders");
         tEnv.toRetractStream(result3, Long.class).print();
+
 
 //        Table listingsTable = tEnv.fromDataStream(stream, "listing_id, " +
 //                "earnest_$_payable_to, " +
